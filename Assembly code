@@ -1,0 +1,146 @@
+ORG 0000H
+    LJMP 0030H
+
+ORG 0003H
+    LJMP 0554H          ; External Interrupt 0 Vector
+
+;================ MAIN PROGRAM =================
+ORG 0030H
+
+    MOV R3, #00H        ; Counter initialized to 0
+
+; ---- Display "WELCOME TO LAB" ----
+    ACALL LCD_ROUTINE
+    MOV DPTR, #DDATA1
+
+L2:
+    CLR A
+    MOVC A, @A+DPTR
+    JZ SHOW_COUNT_MSG
+    ACALL DATA_SUB
+    ACALL DELAY
+    INC DPTR
+    SJMP L2
+
+; ---- Display "COUNT = " ----
+SHOW_COUNT_MSG:
+    ACALL DELAY
+    ACALL DELAY
+    ACALL LCD_ROUTINE
+    MOV DPTR, #COUNT_MSG
+
+L3:
+    CLR A
+    MOVC A, @A+DPTR
+    JZ READY
+    ACALL DATA_SUB
+    ACALL DELAY
+    INC DPTR
+    SJMP L3
+
+; ---- Cursor Position & Interrupt Enable ----
+READY:
+    MOV A, #86H         ; Cursor position after "COUNT = "
+    ACALL CON_SUB
+    ACALL SHOW_COUNT
+
+    SETB TCON.2         ; IT0 = 1 (edge triggered)
+    MOV IE, #81H        ; EA = 1, EX0 = 1
+
+WAIT_LOOP:
+    SJMP WAIT_LOOP
+
+;================ UPDATE DAC =================
+UPDATE_DAC:
+    MOV A, R3
+    MOV P2, A           ; Output to DAC
+    ACALL DAC_DELAY
+    RET
+
+DAC_DELAY:
+    MOV R2, #50
+DAC_LOOP:
+    DJNZ R2, DAC_LOOP
+    RET
+
+;================ INTERRUPT SERVICE ROUTINE =================
+ORG 0554H
+INT0_ISR:
+    INC R3
+    ACALL UPDATE_COUNT
+    RETI
+
+;================ UPDATE COUNT =================
+UPDATE_COUNT:
+    MOV A, #86H
+    ACALL CON_SUB
+    ACALL SHOW_COUNT
+    RET
+
+;================ DISPLAY COUNT =================
+SHOW_COUNT:
+    MOV A, R3
+    MOV B, #10
+    DIV AB              ; A = tens, B = ones
+
+    ADD A, #30H
+    ACALL DATA_SUB
+    ACALL DELAY
+
+    MOV A, B
+    ADD A, #30H
+    ACALL DATA_SUB
+    ACALL DELAY
+    RET
+
+;================ LCD ROUTINES =================
+LCD_ROUTINE:
+    MOV DPTR, #CDATA
+
+L4:
+    CLR A
+    MOVC A, @A+DPTR
+    JZ LCD_DONE
+    ACALL CON_SUB
+    ACALL DELAY
+    INC DPTR
+    SJMP L4
+
+LCD_DONE:
+    RET
+
+CON_SUB:
+    MOV P2, A
+    CLR P3.7            ; RS = 0
+    CLR P3.6            ; RW = 0
+    SETB P3.5           ; EN = 1
+    ACALL DELAY
+    CLR P3.5            ; EN = 0
+    RET
+
+DATA_SUB:
+    MOV P2, A
+    SETB P3.7           ; RS = 1
+    CLR P3.6            ; RW = 0
+    SETB P3.5           ; EN = 1
+    ACALL DELAY
+    CLR P3.5            ; EN = 0
+    RET
+
+;================ DELAY =================
+DELAY:
+    MOV R7, #0FFH
+HERE1:
+    MOV R5, #0FFH
+HERE2:
+    DJNZ R5, HERE2
+    DJNZ R7, HERE1
+    RET
+
+;================ DATA =================
+ORG 0300H
+CDATA:      DB 38H,01H,0EH,06H,80H,0
+DDATA1:     DB "WELCOME TO LAB",0
+COUNT_MSG:  DB "COUNT = ",0
+
+END
